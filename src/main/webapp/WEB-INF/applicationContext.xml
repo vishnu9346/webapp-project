@@ -61,96 +61,6 @@
             <to uri="activemq:personnel.records"/>
         </route>
 
-        <!-- Power BI REST API Routes -->
-        
-        <!-- Get all workspaces -->
-        <route>
-            <from uri="jetty:http://0.0.0.0:8080/powerbi/workspaces?httpMethodRestrict=GET"/>
-            <setHeader headerName="operation">
-                <constant>workspaces</constant>
-            </setHeader>
-            <process ref="powerBIProcessor"/>
-            <log message="Retrieved Power BI workspaces"/>
-        </route>
-        
-        <!-- Get datasets in a workspace -->
-        <route>
-            <from uri="jetty:http://0.0.0.0:8080/powerbi/workspaces/${header.workspaceId}/datasets?httpMethodRestrict=GET"/>
-            <setHeader headerName="operation">
-                <constant>datasets</constant>
-            </setHeader>
-            <process ref="powerBIProcessor"/>
-            <log message="Retrieved datasets for workspace: ${header.workspaceId}"/>
-        </route>
-        
-        <!-- Get reports in a workspace -->
-        <route>
-            <from uri="jetty:http://0.0.0.0:8080/powerbi/workspaces/${header.workspaceId}/reports?httpMethodRestrict=GET"/>
-            <setHeader headerName="operation">
-                <constant>reports</constant>
-            </setHeader>
-            <process ref="powerBIProcessor"/>
-            <log message="Retrieved reports for workspace: ${header.workspaceId}"/>
-        </route>
-        
-        <!-- Refresh a dataset -->
-        <route>
-            <from uri="jetty:http://0.0.0.0:8080/powerbi/workspaces/${header.workspaceId}/datasets/${header.datasetId}/refresh?httpMethodRestrict=POST"/>
-            <setHeader headerName="operation">
-                <constant>refresh</constant>
-            </setHeader>
-            <process ref="powerBIProcessor"/>
-            <log message="Triggered dataset refresh for: ${header.datasetId}"/>
-        </route>
-        
-        <!-- Get refresh history for a dataset -->
-        <route>
-            <from uri="jetty:http://0.0.0.0:8080/powerbi/workspaces/${header.workspaceId}/datasets/${header.datasetId}/refreshes?httpMethodRestrict=GET"/>
-            <setHeader headerName="operation">
-                <constant>refreshhistory</constant>
-            </setHeader>
-            <process ref="powerBIProcessor"/>
-            <log message="Retrieved refresh history for dataset: ${header.datasetId}"/>
-        </route>
-        
-        <!-- Export a report -->
-        <route>
-            <from uri="jetty:http://0.0.0.0:8080/powerbi/workspaces/${header.workspaceId}/reports/${header.reportId}/export?httpMethodRestrict=POST"/>
-            <setHeader headerName="operation">
-                <constant>export</constant>
-            </setHeader>
-            <process ref="powerBIProcessor"/>
-            <log message="Triggered report export for: ${header.reportId}"/>
-        </route>
-        
-        <!-- Power BI Authentication endpoint -->
-        <route>
-            <from uri="jetty:http://0.0.0.0:8080/powerbi/authenticate?httpMethodRestrict=POST"/>
-            <setHeader headerName="operation">
-                <constant>authenticate</constant>
-            </setHeader>
-            <process ref="powerBIProcessor"/>
-            <log message="Power BI authentication completed"/>
-        </route>
-        
-        <!-- Power BI automated data processing route -->
-        <route>
-            <from uri="timer://powerbi-automation?period=300000"/>
-            <log message="Starting Power BI automation workflow"/>
-            <setHeader headerName="operation">
-                <constant>workspaces</constant>
-            </setHeader>
-            <process ref="powerBIProcessor"/>
-            <to uri="activemq:powerbi.workspaces"/>
-        </route>
-        
-        <!-- Process Power BI workspaces for automated operations -->
-        <route>
-            <from uri="activemq:powerbi.workspaces"/>
-            <log message="Processing Power BI workspaces for automation"/>
-            <to uri="file:target/powerbi/workspaces?fileName=workspaces-${date:now:yyyyMMdd-HHmmss}.json"/>
-        </route>
-        
         <!-- Enhanced personnel data processing with Power BI transformation -->
         <route>
             <from uri="activemq:personnel.records"/>
@@ -177,33 +87,54 @@
             </choice>
         </route>
         
-        <!-- Power BI Data Transformation endpoint -->
+        <!-- Power BI automated data processing route -->
         <route>
-            <from uri="jetty:http://0.0.0.0:8080/powerbi/transform?httpMethodRestrict=POST"/>
+            <from uri="timer://powerbi-automation?period=300000"/>
+            <log message="Starting Power BI automation workflow"/>
+            <setHeader headerName="operation">
+                <constant>workspaces</constant>
+            </setHeader>
+            <process ref="powerBIProcessor"/>
+            <to uri="activemq:powerbi.workspaces"/>
+        </route>
+        
+        <!-- Process Power BI workspaces for automated operations -->
+        <route>
+            <from uri="activemq:powerbi.workspaces"/>
+            <log message="Processing Power BI workspaces for automation"/>
+            <to uri="file:target/powerbi/workspaces?fileName=workspaces-${date:now:yyyyMMdd-HHmmss}.json"/>
+        </route>
+        
+        <!-- Manual Power BI data transformation via JMS -->
+        <route>
+            <from uri="activemq:powerbi.transform"/>
             <setHeader headerName="dataOperation">
                 <constant>transform</constant>
             </setHeader>
             <process ref="powerBIDataProcessor"/>
+            <to uri="activemq:powerbi.transformed"/>
             <log message="Data transformed for Power BI"/>
         </route>
         
-        <!-- Power BI Data Aggregation endpoint -->
+        <!-- Manual Power BI data aggregation via JMS -->
         <route>
-            <from uri="jetty:http://0.0.0.0:8080/powerbi/aggregate?httpMethodRestrict=POST"/>
+            <from uri="activemq:powerbi.aggregate"/>
             <setHeader headerName="dataOperation">
                 <constant>aggregate</constant>
             </setHeader>
             <process ref="powerBIDataProcessor"/>
+            <to uri="activemq:powerbi.aggregated"/>
             <log message="Data aggregated for Power BI"/>
         </route>
         
-        <!-- Power BI Data Filtering endpoint -->
+        <!-- Manual Power BI data filtering via JMS -->
         <route>
-            <from uri="jetty:http://0.0.0.0:8080/powerbi/filter?httpMethodRestrict=POST"/>
+            <from uri="activemq:powerbi.filter"/>
             <setHeader headerName="dataOperation">
                 <constant>filter</constant>
             </setHeader>
             <process ref="powerBIDataProcessor"/>
+            <to uri="activemq:powerbi.filtered"/>
             <log message="Data filtered for Power BI"/>
         </route>
         
