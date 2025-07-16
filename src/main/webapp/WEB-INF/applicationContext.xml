@@ -24,6 +24,26 @@
     <property name="brokerURL" value="failover:tcp://localhost:61616"/>
   </bean>
 
+  <!-- Power BI Configuration -->
+  <bean id="powerBIConfig" class="in.saidemy.webapp.powerbi.PowerBIConfig">
+    <property name="tenantId" value="${powerbi.tenant.id:your-tenant-id}"/>
+    <property name="clientId" value="${powerbi.client.id:your-client-id}"/>
+    <property name="clientSecret" value="${powerbi.client.secret:your-client-secret}"/>
+  </bean>
+
+  <!-- Power BI Service -->
+  <bean id="powerBIService" class="in.saidemy.webapp.powerbi.PowerBIService">
+    <constructor-arg ref="powerBIConfig"/>
+  </bean>
+
+  <!-- Power BI Processor -->
+  <bean id="powerBIProcessor" class="in.saidemy.webapp.powerbi.PowerBIProcessor">
+    <constructor-arg ref="powerBIService"/>
+  </bean>
+
+  <!-- Power BI Data Processor -->
+  <bean id="powerBIDataProcessor" class="in.saidemy.webapp.powerbi.PowerBIDataProcessor"/>
+
     <!--
         Here is a sample which processes the input files (leaving them in
         place - see the 'noop' flag), and sends them on a JMS queue. This
@@ -32,6 +52,7 @@
     -->
     <camelContext xmlns="http://camel.apache.org/schema/spring">
         
+        <!-- Original file processing route -->
         <route>
             <from uri="file:src/data?noop=true"/>
             <!-- Print the message to standard out, just as a test -->
@@ -40,20 +61,97 @@
             <to uri="activemq:personnel.records"/>
         </route>
 
+        <!-- Enhanced personnel data processing with Power BI transformation -->
         <route>
             <from uri="activemq:personnel.records"/>
             <choice>
                 <when>
                     <xpath>/person/city = 'London'</xpath>
-                    <log message="UK message"/>
+                    <log message="UK message - processing for Power BI"/>
+                    <setHeader headerName="dataOperation">
+                        <constant>transform</constant>
+                    </setHeader>
+                    <process ref="powerBIDataProcessor"/>
                     <to uri="file:target/messages/uk"/>
+                    <to uri="activemq:powerbi.uk.data"/>
                 </when>
                 <otherwise>
-                    <log message="Other message"/>
+                    <log message="Other message - processing for Power BI"/>
+                    <setHeader headerName="dataOperation">
+                        <constant>enrich</constant>
+                    </setHeader>
+                    <process ref="powerBIDataProcessor"/>
                     <to uri="file:target/messages/others"/>
+                    <to uri="activemq:powerbi.other.data"/>
                 </otherwise>
             </choice>
         </route>
+        
+        <!-- Power BI automated data processing route -->
+        <route>
+            <from uri="timer://powerbi-automation?period=300000"/>
+            <log message="Starting Power BI automation workflow"/>
+            <setHeader headerName="operation">
+                <constant>workspaces</constant>
+            </setHeader>
+            <process ref="powerBIProcessor"/>
+            <to uri="activemq:powerbi.workspaces"/>
+        </route>
+        
+        <!-- Process Power BI workspaces for automated operations -->
+        <route>
+            <from uri="activemq:powerbi.workspaces"/>
+            <log message="Processing Power BI workspaces for automation"/>
+            <to uri="file:target/powerbi/workspaces?fileName=workspaces-${date:now:yyyyMMdd-HHmmss}.json"/>
+        </route>
+        
+        <!-- Manual Power BI data transformation via JMS -->
+        <route>
+            <from uri="activemq:powerbi.transform"/>
+            <setHeader headerName="dataOperation">
+                <constant>transform</constant>
+            </setHeader>
+            <process ref="powerBIDataProcessor"/>
+            <to uri="activemq:powerbi.transformed"/>
+            <log message="Data transformed for Power BI"/>
+        </route>
+        
+        <!-- Manual Power BI data aggregation via JMS -->
+        <route>
+            <from uri="activemq:powerbi.aggregate"/>
+            <setHeader headerName="dataOperation">
+                <constant>aggregate</constant>
+            </setHeader>
+            <process ref="powerBIDataProcessor"/>
+            <to uri="activemq:powerbi.aggregated"/>
+            <log message="Data aggregated for Power BI"/>
+        </route>
+        
+        <!-- Manual Power BI data filtering via JMS -->
+        <route>
+            <from uri="activemq:powerbi.filter"/>
+            <setHeader headerName="dataOperation">
+                <constant>filter</constant>
+            </setHeader>
+            <process ref="powerBIDataProcessor"/>
+            <to uri="activemq:powerbi.filtered"/>
+            <log message="Data filtered for Power BI"/>
+        </route>
+        
+        <!-- Process UK data for Power BI -->
+        <route>
+            <from uri="activemq:powerbi.uk.data"/>
+            <log message="Processing UK data for Power BI dashboard"/>
+            <to uri="file:target/powerbi/uk?fileName=uk-data-${date:now:yyyyMMdd-HHmmss}.json"/>
+        </route>
+        
+        <!-- Process Other data for Power BI -->
+        <route>
+            <from uri="activemq:powerbi.other.data"/>
+            <log message="Processing other data for Power BI dashboard"/>
+            <to uri="file:target/powerbi/other?fileName=other-data-${date:now:yyyyMMdd-HHmmss}.json"/>
+        </route>
+        
     </camelContext>
 
 </beans>
